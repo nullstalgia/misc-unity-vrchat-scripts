@@ -14,7 +14,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 using UnityEngine;
 using UnityEditor;
 
@@ -23,15 +22,16 @@ public class MaterialCopier : EditorWindow
     private GameObject sourceParent;
     private GameObject targetParent;
 
-    [MenuItem("Tools/Material Copier")]
+    [MenuItem("Tools/Null's Tools/Material Copier")]
     public static void ShowWindow()
     {
         GetWindow<MaterialCopier>("Material Copier");
     }
     
+    #region GUI
     private void OnGUI()
     {
-        GUILayout.Label("Material Copier", EditorStyles.boldLabel);
+        GUILayout.Label("Material Copier (by name)", EditorStyles.boldLabel);
         sourceParent = (GameObject)EditorGUILayout.ObjectField("Source Parent", sourceParent, typeof(GameObject), true);
         targetParent = (GameObject)EditorGUILayout.ObjectField("Target Parent", targetParent, typeof(GameObject), true);
 
@@ -40,7 +40,9 @@ public class MaterialCopier : EditorWindow
             CopyMaterials(sourceParent, targetParent);
         }
     }
-    
+    #endregion
+
+    #region Utility
     private void CopyMaterials(GameObject source, GameObject target)
     {
         if (source == null || target == null)
@@ -64,4 +66,5 @@ public class MaterialCopier : EditorWindow
             }
         }
     }
+    #endregion
 }

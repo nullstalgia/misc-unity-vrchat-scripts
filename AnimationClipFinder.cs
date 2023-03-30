@@ -14,7 +14,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -27,34 +26,31 @@ public class AnimationClipFinder : EditorWindow
     private List<AnimationClip> animationClips;
     private bool hideDuplicateEntries;
 
-    // Add a menu item for the Animation Clip Finder window
-    [MenuItem("Tools/Animation Clip Finder")]
+    [MenuItem("Tools/Null's Tools/Animation Clip Finder")]
     public static void ShowWindow()
     {
-        // Create the window with the specified title
         GetWindow<AnimationClipFinder>("Animation Clip Finder");
     }
 
     private void OnGUI()
     {
-        // Display input fields and options
-        GUILayout.Label("Enter the Animator and GameObject to find Animation Clips", EditorStyles.boldLabel);
+        GUILayout.Label("Enter an Animator and GameObject to find relevant Clips", EditorStyles.boldLabel);
 
         targetAnimator = (Animator)EditorGUILayout.ObjectField("Animator", targetAnimator, typeof(Animator), true);
         targetGameObject = (GameObject)EditorGUILayout.ObjectField("GameObject", targetGameObject, typeof(GameObject), true);
 
         hideDuplicateEntries = EditorGUILayout.Toggle("Hide Duplicate Entries", hideDuplicateEntries);
 
-        // Find animation clips when the button is clicked
         if (GUILayout.Button("Find Animation Clips"))
         {
             if (targetAnimator != null && targetGameObject != null)
             {
-                animationClips = FindAnimationClips(targetAnimator, targetGameObject, hideDuplicateEntries);
+                animationClips = new List<AnimationClip>();
+                AnimatorController controller = targetAnimator.runtimeAnimatorController as AnimatorController;
+                FindAnimationClips(controller, targetGameObject, hideDuplicateEntries, animationClips);
             }
         }
 
-        // Display the found animation clips
         if (animationClips != null)
         {
             EditorGUILayout.LabelField("Found Animation Clips:", EditorStyles.boldLabel);
@@ -65,51 +61,74 @@ public class AnimationClipFinder : EditorWindow
         }
     }
 
-    // Find all animation clips that reference the target GameObject
-    private List<AnimationClip> FindAnimationClips(Animator animator, GameObject targetObject, bool hideDuplicates)
+    private void FindAnimationClips(AnimatorController controller, GameObject targetObject, bool hideDuplicates, List<AnimationClip> clips)
     {
-        List<AnimationClip> clips = new List<AnimationClip>();
-        AnimatorController controller = animator.runtimeAnimatorController as AnimatorController;
-
-        // Calculate the target GameObject's path relative to the Animator
-        string targetObjectPath = AnimationUtility.CalculateTransformPath(targetObject.transform, animator.transform);
-
-
         if (controller != null)
         {
-            // Iterate through all layers and states in the AnimatorController
             foreach (var layer in controller.layers)
             {
-                foreach (var state in layer.stateMachine.states)
-                {
-                    AnimationClip clip = state.state.motion as AnimationClip;
-
-                    if (clip != null)
-                    {
-                        // Get all bindings (object reference and property) from the animation clip
-                        EditorCurveBinding[] objectReferenceBindings = AnimationUtility.GetObjectReferenceCurveBindings(clip);
-                        EditorCurveBinding[] propertyBindings = AnimationUtility.GetCurveBindings(clip);
-                        List<EditorCurveBinding> allBindings = new List<EditorCurveBinding>(objectReferenceBindings);
-                        allBindings.AddRange(propertyBindings);
-
-                        // Check if the target GameObject is referenced in the bindings
-                        foreach (var binding in allBindings)
-                        {
-                            if (binding.path == targetObjectPath)
-                            {
-                                // Add the clip to the list if duplicates are allowed or the clip is not already in the list
-                                if (!hideDuplicates || !clips.Contains(clip))
-                                {
-                                    clips.Add(clip);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
+                ProcessStateMachine(layer.stateMachine, targetAnimator, targetObject, hideDuplicates, clips);
             }
         }
+    }
 
-        return clips;
+    private void ProcessStateMachine(AnimatorStateMachine stateMachine, Animator animator, GameObject targetObject, bool hideDuplicates, List<AnimationClip> clips)
+    {
+        foreach (var state in stateMachine.states)
+        {
+            Motion motion = state.state.motion;
+            ProcessMotion(motion, animator, targetObject, hideDuplicates, clips);
+        }
+
+        foreach (var childStateMachine in stateMachine.stateMachines)
+        {
+            ProcessStateMachine(childStateMachine.stateMachine, animator, targetObject, hideDuplicates, clips);
+        }
+    }
+
+    private void ProcessMotion(Motion motion, Animator animator, GameObject targetObject, bool hideDuplicates, List<AnimationClip> clips)
+    {
+        if (motion is BlendTree)
+        {
+            BlendTree blendTree = motion as BlendTree;
+            foreach (var childMotion in blendTree.children)
+            {
+                ProcessMotion(childMotion.motion, animator, targetObject, hideDuplicates, clips);
+            }
+        }
+        else if (motion is AnimationClip)
+        {
+            AnimationClip clip = motion as AnimationClip;
+            AddClipIfReferencesObject(clip, animator, targetObject, hideDuplicates, clips);
+        }
+    }
+
+    private void AddClipIfReferencesObject(AnimationClip clip, Animator animator, GameObject targetObject, bool hideDuplicates, List<AnimationClip> clips)
+    {
+        EditorCurveBinding[] objectReferenceBindings = AnimationUtility.GetObjectReferenceCurveBindings(clip);
+        EditorCurveBinding[] propertyBindings = AnimationUtility.GetCurveBindings(clip);
+        List<EditorCurveBinding> allBindings = new List<EditorCurveBinding>(objectReferenceBindings);
+        allBindings.AddRange(propertyBindings);
+
+        string targetObjectPath = AnimationUtility.CalculateTransformPath(targetObject.transform, animator.transform);
+
+        foreach (var binding in allBindings)
+        {
+            if (binding.path == targetObjectPath)
+            {
+                if (hideDuplicates)
+                {
+                    if (!clips.Contains(clip))
+                    {
+                        clips.Add(clip);
+                    }
+                }
+                else
+                {
+                    clips.Add(clip);
+                }
+                break;
+            }
+        }
     }
 }
